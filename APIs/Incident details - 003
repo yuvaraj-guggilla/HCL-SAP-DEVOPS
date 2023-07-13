@@ -1,0 +1,339 @@
+
+****************************************************************
+* Description -  Fetch incident details through Process type or incident Id or through both.                                           *
+*------------------------------------------------------------- *
+* Created by -   51971059(Parul Trivedi)                       *
+* Created on - 2 feb 2023                                      *
+* Package -   ZHCLSWJI_001                                     *
+* Transpoert request detail verion wise -   ES1K900312         *
+* Import ---->   object id,process type                        *
+* Export ---->   Procees details                               *
+* Tables ---->crmd_orderadm_h,crm_jest,crmd_activity_h,scpriot,*
+*                ztab000007                                    *
+*************************************************************
+
+
+  METHOD zincidentset_get_entityset.
+
+
+****************************************************************
+** DECLARING STRUCTURE
+****************************************************************
+
+  TYPES : BEGIN OF ty_data,
+            guid         TYPE crmd_orderadm_h-guid,
+            changed_at   TYPE crmd_orderadm_h-changed_at,
+            object_id    TYPE crmd_orderadm_h-object_id,
+            priority     TYPE crmd_activity_h-priority,
+            created_at   TYPE crmd_orderadm_h-created_at,
+            changed_by   TYPE crmd_orderadm_h-changed_by,
+            process_type TYPE crmd_orderadm_h-process_type,
+            description  TYPE crmd_orderadm_h-description,
+            created_by   TYPE crmd_orderadm_h-created_by,
+            objnr        TYPE crm_jest-objnr,
+            stat         TYPE crm_jest-stat,
+            stsma        TYPE tj30t-stsma,
+            estat        TYPE tj30t-estat,
+            spras        TYPE tj30t-spras,
+            inact        TYPE crm_jest-inact,
+            txt30        TYPE tj30t-txt30,
+            txt_long     TYPE char40,
+            zzfld000001  TYPE ztab000007-zzfld000001,
+
+          END  OF ty_data.
+
+****************************************************************
+** DECLARING INTERNAL TABLES
+****************************************************************
+
+  DATA : ls_entity  LIKE LINE  OF et_entityset,
+         lt_fcrmd   TYPE TABLE OF ty_data,
+         lt_fcrmd_1 TYPE TABLE OF ty_data,
+         lv_status  TYPE string,
+         lv_tr      TYPE string,
+         lv_count   TYPE i.
+
+*****************************************************************
+** DECLARING CONSTANT
+*****************************************************************
+
+  DATA: lc_objid   TYPE c LENGTH   8 VALUE  'ObjectId',
+        lc_prcstyp TYPE c LENGTH  11 VALUE  'ProcessType',
+        lc_zmin    TYPE c LENGTH   4 VALUE  'ZMIN',
+        lc_lang    TYPE c LENGTH   1 VALUE  'E',
+        lc_stsma   TYPE c LENGTH   8 VALUE  'IT000002',
+        lc_space   TYPE c LENGTH   1 VALUE  ' '.
+
+  IF it_filter_select_options IS NOT INITIAL .
+
+********************************************************************
+*** Decalring a input parameter OBJECT_ID and a variable IV_OBJECT
+********************************************************************
+
+    READ TABLE it_filter_select_options
+     INTO DATA(ls_filter_select_options)
+      WITH KEY property = lc_objid.
+
+    IF sy-subrc IS INITIAL.
+
+      DATA(iv_object) = ls_filter_select_options-select_options[ 1 ]-low.
+
+    ENDIF.
+
+
+***********************************************************************
+*** Decalring a input parameter PROCESS_TYPE and a variable IV_PROCESS
+***********************************************************************
+
+    READ TABLE it_filter_select_options
+          INTO ls_filter_select_options
+      WITH KEY property = lc_prcstyp.
+
+    IF sy-subrc IS INITIAL.
+
+      DATA(iv_process) = ls_filter_select_options-select_options[ 1 ]-low.
+
+    ENDIF.
+
+
+    IF iv_object IS NOT INITIAL.
+
+**********************************************************************
+*** Fetching the data by joining tables respective to the input value
+**********************************************************************
+
+      SELECT a~guid,
+             a~changed_at,
+             a~object_id,
+             a~created_at,
+             a~changed_by,
+             a~process_type,
+             a~description,
+             a~created_by,
+             b~objnr,
+             b~stat,
+             c~stsma,
+             c~estat,
+             c~spras,
+             b~inact,
+             c~txt30,
+             d~priority,
+             e~txt_long,
+             f~zzfld000001,
+             f~parent_id
+        FROM crmd_orderadm_h AS a
+        JOIN crm_jest        AS b
+          ON a~guid           = b~objnr
+        JOIN tj30t           AS c
+          ON b~stat           = c~estat
+        JOIN crmd_activity_h AS d
+          ON a~guid           = d~guid
+        JOIN scpriot         AS e
+          ON d~priority       = e~priority
+        JOIN ztab000007      AS f
+          ON a~guid           = f~parent_id
+         AND e~langu          = 'E'
+INTO TABLE @DATA(lt_crmd)
+       WHERE a~object_id     EQ @iv_object
+         AND a~process_type  EQ @lc_zmin
+         AND c~stsma         EQ @lc_stsma
+         AND c~spras         EQ @lc_lang.
+
+      IF lt_crmd IS NOT INITIAL.
+
+        lt_fcrmd  = CORRESPONDING #( lt_crmd ).
+        SORT lt_fcrmd BY inact.
+        SORT lt_crmd  BY inact DESCENDING.
+
+        DELETE ADJACENT DUPLICATES
+                              FROM lt_fcrmd
+                         COMPARING object_id.
+
+        LOOP AT lt_fcrmd
+      INTO DATA(ls_fcrmd).
+
+          LOOP AT lt_crmd
+        INTO DATA(lw_crmd)
+            WHERE object_id = ls_fcrmd-object_id.
+
+            CONCATENATE lv_status lw_crmd-txt30 '-'
+                   INTO lv_status.
+            CONCATENATE lv_tr lw_crmd-zzfld000001 '-'
+                   INTO lv_tr.
+
+          ENDLOOP.
+
+        ENDLOOP.
+
+** lv_status
+
+        lv_count  = strlen( lv_status ).
+        lv_count  = lv_count - 1.
+        lv_status = lv_status+0(lv_count).
+
+**  lv_tr
+
+        lv_count  = strlen( lv_tr ).
+        lv_count  = lv_count - 1.
+        lv_tr     = lv_tr+0(lv_count).
+
+      ENDIF.
+
+    ENDIF.
+
+    IF iv_process IS NOT INITIAL.
+
+************************************************************************************
+*** using select statement fetching different fields from 6 tables through innerjoin.
+*************************************************************************************
+
+      SELECT a~guid,
+             a~changed_at,
+             a~object_id,
+             a~created_at,
+             a~changed_by,
+             a~process_type,
+             a~description,
+             a~created_by,
+             b~objnr,
+             b~stat,
+             c~stsma,
+             c~estat,
+             c~spras,
+             b~inact,
+             c~txt30,
+             d~priority,
+             e~txt_long,
+             f~zzfld000001,
+             f~parent_id
+        FROM crmd_orderadm_h AS a
+        JOIN crm_jest        AS b
+          ON a~guid           = b~objnr
+        JOIN ztab000007      AS f
+          ON a~guid           = f~parent_id
+        JOIN tj30t           AS c
+          ON b~stat           = c~estat
+        JOIN crmd_activity_h AS d
+          ON a~guid           = d~guid
+        JOIN scpriot         AS e
+          ON d~priority       = e~priority
+         AND e~langu          = @lc_lang
+INTO TABLE @DATA(lt_crmd_1)
+       WHERE a~process_type  EQ @lc_zmin
+         AND c~stsma         EQ @lc_stsma
+         AND c~spras         EQ @lc_lang.
+    ENDIF.                                                                                      "@iv_process.
+*
+
+    IF lt_crmd IS NOT INITIAL.
+
+      LOOP AT lt_fcrmd
+    INTO DATA(lw_fcrmd).
+
+        ls_entity-object_id    = lw_fcrmd-object_id.
+        ls_entity-ptxt_long    = lw_fcrmd-txt_long.                                             "lw_fcrmd-priority.
+        ls_entity-process_type = lw_fcrmd-process_type.
+        ls_entity-description  = lw_fcrmd-description.
+        ls_entity-created_by   = lw_fcrmd-created_by.
+        ls_entity-created_at   = lw_fcrmd-created_at.
+        ls_entity-changed_at   = lw_fcrmd-changed_at.
+        ls_entity-changed_by   = lw_fcrmd-changed_by.
+        ls_entity-txt30        = lw_fcrmd-txt30.
+        ls_entity-zstatus      = lv_status.
+        ls_entity-tr_number    = lv_tr .                                                        "lw_fcrmd-txt30.
+
+        APPEND ls_entity      TO et_entityset.
+
+      ENDLOOP.
+
+    ELSEIF lt_crmd_1 IS NOT INITIAL.
+
+******************************************************************************
+** looping the entries into final internal table to display the output.
+******************************************************************************
+
+      lt_fcrmd_1 = CORRESPONDING #( lt_crmd_1 ).
+
+      SORT lt_crmd_1 BY object_id ASCENDING inact DESCENDING.
+
+      DELETE ADJACENT DUPLICATES FROM lt_fcrmd_1
+                            COMPARING object_id.
+
+      LOOP AT lt_fcrmd_1
+    INTO DATA(ls_fcrmd_1).
+
+        CLEAR: lv_status,lv_count, lv_tr.
+
+        LOOP AT lt_crmd_1
+      INTO DATA(lw_crmd_1)
+          WHERE object_id = ls_fcrmd_1-object_id.
+
+          CONCATENATE lv_status lw_crmd_1-txt30   lc_space
+                 INTO lv_status.
+          CONCATENATE lv_tr lw_crmd_1-zzfld000001 lc_space
+                 INTO lv_tr.
+
+        ENDLOOP.
+
+** LV_STATUS
+
+        lv_count               = strlen( lv_status ).
+        lv_count               = lv_count - 1.
+        lv_status              = lv_status+0(lv_count).
+
+** LV_TR
+
+        lv_count               = strlen( lv_tr ).
+        lv_count               = lv_count - 1.
+        lv_tr                  = lv_tr+0(lv_count).
+
+** Transfering data into final internal table.
+
+        ls_entity-object_id    = ls_fcrmd_1-object_id.
+        ls_entity-ptxt_long    = ls_fcrmd_1-txt_long.                                        "ls_fcrmd_1-priority.
+        ls_entity-process_type = ls_fcrmd_1-process_type.
+        ls_entity-description  = ls_fcrmd_1-description.
+        ls_entity-created_by   = ls_fcrmd_1-created_by.
+        ls_entity-created_at   = ls_fcrmd_1-created_at.
+        ls_entity-changed_at   = ls_fcrmd_1-changed_at.
+        ls_entity-changed_by   = ls_fcrmd_1-changed_by.
+        ls_entity-txt30        = ls_fcrmd_1-txt30.
+        ls_entity-zstatus      = lv_status.
+        ls_entity-tr_number    = lv_tr.                                                      "ls_fcrmd_1-ZZFLD000001.
+
+        APPEND ls_entity      TO et_entityset.
+
+      ENDLOOP.
+
+    ELSE.
+
+      ls_entity-description = 'Data Does Not Exist'.                                         " ls_crmd_1-description.
+
+      APPEND ls_entity     TO et_entityset.
+
+    ENDIF.
+
+  ENDIF.
+
+**TRY.
+*CALL METHOD SUPER->ZINCIDENTSET_GET_ENTITYSET
+*  EXPORTING
+*    IV_ENTITY_NAME           =
+*    IV_ENTITY_SET_NAME       =
+*    IV_SOURCE_NAME           =
+*    IT_FILTER_SELECT_OPTIONS =
+*    IS_PAGING                =
+*    IT_KEY_TAB               =
+*    IT_NAVIGATION_PATH       =
+*    IT_ORDER                 =
+*    IV_FILTER_STRING         =
+*    IV_SEARCH_STRING         =
+**    io_tech_request_context  =
+**  IMPORTING
+**    et_entityset             =
+**    es_response_context      =
+*    .
+** CATCH /iwbep/cx_mgw_busi_exception .
+** CATCH /iwbep/cx_mgw_tech_exception .
+**ENDTRY.
+  ENDMETHOD.
