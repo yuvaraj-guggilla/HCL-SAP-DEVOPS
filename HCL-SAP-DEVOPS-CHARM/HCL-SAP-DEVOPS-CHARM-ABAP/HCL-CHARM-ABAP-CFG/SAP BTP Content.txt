@@ -1,0 +1,13 @@
+Now we are calling SAP BTP is first started in 2010 called HANA Cloud Platform and
+it renamed to SAP Coud platform in 2015-2016 and in 2021 they renamed it as SAP BTP
+
+Elasticity: you can run any given point of time many number of services and we have choice of technoology to choose like Node JS,
+            Phython, ABAP, JAVA. This gives the flexibility and elasticity when it comes to applications.
+
+Low TCO: Lower Total Cost of Ownership is an extimate of the expenses associated with the procurement, deplyment, development maintenance
+         and usfe of a technology asset through out its lifecycle.
+
+
+SAP BTP: It is a platform as a service for developers, to quickly get started without wanting the underlaying platform to build the application
+         It provides Runtime, Middleware, Database and all the required infrastructure for to build and mange your application
+         end to end.
